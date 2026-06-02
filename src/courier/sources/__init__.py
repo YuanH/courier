@@ -1,0 +1,1 @@
+"""Source plugins — fetch data from external services."""

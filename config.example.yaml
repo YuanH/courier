@@ -1,0 +1,53 @@
+# Courier — example configuration
+# Copy to config.yaml and edit for your setup.
+
+settings:
+  poll_interval_minutes: 5
+  dedup_persistence: "state.json"
+  nitter_fallback: "xcancel.com"
+
+nitter_instances:
+  primary: "https://nitter.net"
+  fallback: "https://xcancel.com"
+  other_options:
+    - "https://nitter.privacyredirect.com"
+
+sources:
+  - handle: "FabrizioRomano"
+    display_name: "Fabrizio Romano"
+    type: nitter
+    active: true
+
+  - handle: "David_Ornstein"
+    display_name: "David Ornstein"
+    type: nitter
+    active: true
+
+  - handle: "TheAthleticFC"
+    display_name: "The Athletic Football"
+    type: nitter
+    active: true
+
+  - handle: "DeadlineDayLive"
+    display_name: "Deadline Day"
+    type: nitter
+    active: false
+
+destinations:
+  - id: "futbol"
+    webhook_url: "https://discord.com/api/webhooks/your-webhook-id/your-webhook-token"
+    display_name: "#futbol"
+
+  - id: "transfers"
+    webhook_url: "https://discord.com/api/webhooks/your-webhook-id/your-webhook-token"
+    display_name: "#transfers"
+
+routes:
+  - source: "FabrizioRomano"
+    destinations: ["futbol", "transfers"]
+
+  - source: "David_Ornstein"
+    destinations: ["futbol", "transfers"]
+
+  - source: "TheAthleticFC"
+    destinations: ["futbol"]
