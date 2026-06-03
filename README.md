@@ -12,19 +12,19 @@
 ## Quickstart
 
 ```bash
-pip install -e .
+uv sync
 
 cp config.example.yaml config.yaml
 # Edit config.yaml with your webhook URLs
 
-courier -c config.yaml
+uv run courier -c config.yaml
 ```
 
 ## Usage
 
 ```
-courier -c config.yaml        # run with config
-courier -c config.yaml -v      # debug logging
+uv run courier -c config.yaml        # run with config
+uv run courier -c config.yaml -v      # debug logging
 ```
 
 ## Configuration

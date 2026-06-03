@@ -16,5 +16,8 @@ courier = "courier.__main__:main"
 requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
+[dependency-groups]
+dev = []
+
 [tool.setuptools.packages.find]
 where = ["src"]

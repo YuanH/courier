@@ -33,14 +33,10 @@ def _build_embed(item: Item, source_name: str) -> dict:
 class DiscordWebhookDestination(Destination):
     def __init__(
         self,
-        dest_id: str,
         webhook_url: str,
-        display_name: str,
         client: httpx.Client | None = None,
     ) -> None:
-        self._id = dest_id
         self._webhook_url = webhook_url
-        self._display_name = display_name
         self._client = client or httpx.Client(timeout=10)
 
     def send(self, item: Item, source_name: str) -> None:

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import logging
 import signal
-import sys
 import time
-from pathlib import Path
 
 import httpx
 
@@ -51,9 +49,7 @@ class Engine:
         self._destinations: dict[str, DiscordWebhookDestination] = {}
         for dest in config.destinations:
             self._destinations[dest.id] = DiscordWebhookDestination(
-                dest_id=dest.id,
                 webhook_url=dest.webhook_url,
-                display_name=dest.display_name,
                 client=self._client,
             )
 
@@ -72,13 +68,6 @@ class Engine:
     def _handle_signal(self, signum: int, _frame) -> None:
         logger.info("Received signal %s, shutting down...", signum)
         self._running = False
-
-    def _reload_config(self) -> None:
-        """Re-read config from disk (triggered by SIGHUP or periodic check)."""
-        logger.info("Reloading config...")
-        # In a full implementation this would re-initialize sources/destinations.
-        # For now, just re-read the state file.
-        self._state.save()
 
     def run(self) -> None:
         interval = self._config.settings.poll_interval_minutes * 60
@@ -119,10 +108,9 @@ class Engine:
                                 "Failed to send %s to %s", item.id, dest_id
                             )
 
-                # Update state to latest item ID
+                # Update state to latest item ID and persist immediately
                 self._state.set(handle, items[-1].id)
-
-            self._state.save()
+                self._state.save()
 
             if self._running:
                 # Sleep in short intervals so we can catch shutdown signals

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 
 import feedparser
 import httpx
@@ -16,11 +15,6 @@ _ID_PATTERN = re.compile(r"/status/(\d+)")
 def _extract_id(link: str) -> str | None:
     m = _ID_PATTERN.search(link)
     return m.group(1) if m else None
-
-
-def _extract_text(entry: dict) -> str:
-    summary = entry.get("summary", "")
-    return summary
 
 
 class NitterSource(Source):
@@ -60,7 +54,7 @@ class NitterSource(Source):
                 if since_id and item_id <= since_id:
                     continue
 
-                text = _extract_text(entry)
+                text = entry.get("summary", "")
                 published = entry.get("published", "")
                 media_urls = []
                 if "media_content" in entry:
