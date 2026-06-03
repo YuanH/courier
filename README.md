@@ -27,6 +27,36 @@ uv run courier -c config.yaml        # run with config
 uv run courier -c config.yaml -v      # debug logging
 ```
 
+## Podman
+
+Build and run as a container:
+
+```bash
+podman build -t courier:latest -f Containerfile .
+podman run -d \
+  --name courier \
+  --replace \
+  --restart=unless-stopped \
+  -v "$PWD/config.yaml:/config/config.yaml:ro" \
+  -v courier-data:/data \
+  courier:latest
+```
+
+Check it:
+
+```bash
+podman logs -f courier
+podman exec courier ls -l /data
+```
+
+Stop it:
+
+```bash
+podman stop courier
+```
+
+The container reads `/config/config.yaml` and writes state to `/data/state.json` when `settings.dedup_persistence` is `state.json`.
+
 ## Configuration
 
 See `config.example.yaml`. Key structure:

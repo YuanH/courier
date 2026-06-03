@@ -1,0 +1,14 @@
+services:
+  courier:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: courier:latest
+    container_name: courier
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+      - courier-data:/data
+
+volumes:
+  courier-data:
