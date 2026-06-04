@@ -25,23 +25,27 @@ uv run courier -c config.yaml -v
 Container workflow:
 
 ```bash
-podman build -t courier:latest -f Containerfile .
-podman run -d \
-  --name courier \
-  --replace \
-  --restart=unless-stopped \
-  -v "$PWD/config.yaml:/config/config.yaml:ro" \
-  -v courier-data:/data \
-  courier:latest
-podman logs -f courier
+make build
+make run
+make logs
 ```
 
-After code changes, rebuild and restart:
+Send a synthetic Discord test item:
 
 ```bash
-podman build -t courier:latest -f Containerfile .
-podman restart courier
-podman logs --tail 80 courier
+make test-item
+```
+
+After config changes, restart only:
+
+```bash
+make restart
+```
+
+After code or dependency changes, rebuild and restart:
+
+```bash
+make rebuild
 ```
 
 ## Verification

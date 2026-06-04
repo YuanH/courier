@@ -1,7 +1,8 @@
-"""Discord webhook destination — send items as rich embeds."""
+"""Discord webhook destination — send items as fxtwitter links."""
 
 from __future__ import annotations
 
+import re
 import time
 
 import httpx
@@ -9,25 +10,23 @@ import httpx
 from courier.destinations.base import Destination
 from courier.sources.base import Item
 
-_TWITTER_BLUE = 0x1DA1F2
+_STATUS_URL_RE = re.compile(
+    r"https?://(?:www\.)?(?:x|twitter|nitter|xcancel|fxtwitter)\.\w+/(?P<handle>[^/]+)/status/(?P<status_id>\d+)"
+)
 
 
-def _build_embed(item: Item, source_name: str) -> dict:
-    embed: dict = {
-        "description": item.text[:2000],
-        "url": item.url,
-        "color": _TWITTER_BLUE,
-        "footer": {"text": f"🐦 {source_name}"},
+def _fxtwitter_url(item: Item) -> str:
+    match = _STATUS_URL_RE.search(item.url)
+    if not match:
+        return item.url
+    return f"https://fxtwitter.com/{match.group('handle')}/status/{match.group('status_id')}?s=20"
+
+
+def _build_payload(item: Item, source_name: str) -> dict:
+    return {
+        "username": source_name,
+        "content": _fxtwitter_url(item),
     }
-    if item.author:
-        embed["author"] = {"name": item.author}
-    if item.timestamp:
-        embed["timestamp"] = item.timestamp
-    # First media as image
-    for media in item.media_urls:
-        embed["image"] = {"url": media}
-        break
-    return embed
 
 
 class DiscordWebhookDestination(Destination):
@@ -40,11 +39,7 @@ class DiscordWebhookDestination(Destination):
         self._client = client or httpx.Client(timeout=10)
 
     def send(self, item: Item, source_name: str) -> None:
-        embed = _build_embed(item, source_name)
-        payload = {
-            "username": source_name,
-            "embeds": [embed],
-        }
+        payload = _build_payload(item, source_name)
 
         for attempt in range(3):
             try:

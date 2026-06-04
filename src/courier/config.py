@@ -68,6 +68,25 @@ class Config:
         return {r.source: r.destinations for r in self.routes}
 
 
+def _load_routes(routes_raw: list[dict]) -> list[Route]:
+    """Load routes from source-grouped or channel-grouped config entries."""
+    routes: list[Route] = []
+    for entry in routes_raw:
+        if "source" in entry:
+            routes.append(Route(**entry))
+            continue
+
+        if "channel" in entry:
+            destination = entry["channel"]
+            for source in entry.get("sources", []):
+                routes.append(Route(source=source, destinations=[destination]))
+            continue
+
+        raise ValueError("Route must define either 'source' or 'channel'")
+
+    return routes
+
+
 def load_config(path: str | Path) -> Config:
     path = Path(path)
     if not path.exists():
@@ -93,7 +112,7 @@ def load_config(path: str | Path) -> Config:
 
     sources = [Source(**s) for s in raw.get("sources", [])]
     destinations = [Destination(**d) for d in raw.get("destinations", [])]
-    routes = [Route(**r) for r in raw.get("routes", [])]
+    routes = _load_routes(raw.get("routes", []))
 
     # Validation
     known_sources = {s.handle for s in sources}

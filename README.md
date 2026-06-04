@@ -32,6 +32,13 @@ uv run courier -c config.yaml -v      # debug logging
 Build and run as a container:
 
 ```bash
+make build
+make run
+```
+
+Or manually:
+
+```bash
 podman build -t courier:latest -f Containerfile .
 podman run -d \
   --name courier \
@@ -45,17 +52,30 @@ podman run -d \
 Check it:
 
 ```bash
-podman logs -f courier
-podman exec courier ls -l /data
+make ps
+make logs
+make data
+```
+
+Send a synthetic test item through the configured Discord webhook:
+
+```bash
+make test-item
 ```
 
 Stop it:
 
 ```bash
-podman stop courier
+make stop
 ```
 
-The container reads `/config/config.yaml` and writes state to `/data/state.json` when `settings.dedup_persistence` is `state.json`.
+Rebuild and relaunch after code or dependency changes:
+
+```bash
+make rebuild
+```
+
+The container reads `/config/config.yaml` and writes state to `/data/state.json` when `settings.dedup_persistence` is `state.json`. Because `config.yaml` is bind-mounted, editing config does not require rebuilding the image; restart the container with `make restart` so Courier reloads the file.
 
 ## Configuration
 
