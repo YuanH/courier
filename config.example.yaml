@@ -42,12 +42,16 @@ destinations:
     webhook_url: "https://discord.com/api/webhooks/your-webhook-id/your-webhook-token"
     display_name: "#transfers"
 
+# Routes can be grouped by destination channel. This keeps the config easy to
+# scan when several sources fan into the same Discord channel.
 routes:
-  - source: "FabrizioRomano"
-    destinations: ["futbol", "transfers"]
+  - channel: "futbol"
+    sources:
+      - "FabrizioRomano"
+      - "David_Ornstein"
+      - "TheAthleticFC"
 
-  - source: "David_Ornstein"
-    destinations: ["futbol", "transfers"]
-
-  - source: "TheAthleticFC"
-    destinations: ["futbol"]
+  - channel: "transfers"
+    sources:
+      - "FabrizioRomano"
+      - "David_Ornstein"

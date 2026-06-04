@@ -11,6 +11,13 @@ Courier is a small Python daemon for many-to-many data routing: poll sources, de
   - `state.json` is runtime state.
   - Discord webhook URLs must stay out of git.
 - `config.example.yaml` should remain safe, realistic, and secret-free.
+- Prefer channel-grouped routes in examples:
+  ```yaml
+  routes:
+    - channel: futbol
+      sources: [FabrizioRomano, David_Ornstein]
+  ```
+  The loader still supports legacy source-grouped routes for compatibility.
 - Preserve the many-to-many architecture: sources, destinations, and routes are separate concepts.
 - Future-proof source/destination work with explicit types and small interfaces rather than hard-coded one-off logic.
 
@@ -56,6 +63,7 @@ Before claiming a change works, run the relevant checks for the change. At minim
 uv sync
 uv run python -m compileall -q src
 uv run courier --help
+uv run pytest
 ```
 
 For container changes:
