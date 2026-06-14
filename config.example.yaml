@@ -42,6 +42,12 @@ sources:
     channel_id: "UCBJycsmduvYEL83R_U4JriQ"
     active: true
 
+  # The same thing by @handle only — Courier resolves the channel id for you.
+  - handle: "@veritasium"
+    display_name: "Veritasium"
+    type: youtube
+    active: true
+
 destinations:
   - id: "futbol"
     webhook_url: "https://discord.com/api/webhooks/your-webhook-id/your-webhook-token"
@@ -72,3 +78,4 @@ routes:
   - channel: "tech"
     sources:
       - "@mkbhd"
+      - "@veritasium"
