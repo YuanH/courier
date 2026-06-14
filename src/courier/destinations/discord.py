@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import re
 import time
+from typing import TYPE_CHECKING
 
 import httpx
 
 from courier.destinations.base import Destination
 from courier.sources.base import Item
+
+if TYPE_CHECKING:
+    from courier.config import Destination as DestinationConfig
 
 _STATUS_URL_RE = re.compile(
     r"https?://(?:www\.)?(?:x|twitter|nitter|xcancel|fxtwitter)\.\w+/(?P<handle>[^/]+)/status/(?P<status_id>\d+)"
@@ -37,6 +41,12 @@ class DiscordWebhookDestination(Destination):
     ) -> None:
         self._webhook_url = webhook_url
         self._client = client or httpx.Client(timeout=10)
+
+    @classmethod
+    def from_config(
+        cls, cfg: DestinationConfig, client: httpx.Client
+    ) -> DiscordWebhookDestination:
+        return cls(webhook_url=cfg.webhook_url, client=client)
 
     def send(self, item: Item, source_name: str) -> None:
         payload = _build_payload(item, source_name)

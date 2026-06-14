@@ -81,16 +81,34 @@ The container reads `/config/config.yaml` and writes state to `/data/state.json`
 
 See `config.example.yaml`. Key structure:
 
-- **sources** — data origins (type: `nitter` for X/Twitter)
-- **destinations** — where to send (webhook URLs)
+- **sources** — data origins (`type: nitter` for X/Twitter, `type: youtube` for YouTube channels)
+- **destinations** — where to send (`type: discord` webhook URLs)
 - **routes** — which sources go to which destinations
+
+Sources and destinations are resolved through a type registry
+(`courier.sources.SOURCE_TYPES`, `courier.destinations.DESTINATION_TYPES`), so
+adding a new kind means writing one class and registering it — no engine changes.
+
+## YouTube
+
+YouTube channels are polled via their public per-channel RSS feed — no API key,
+no quota. Identify a channel by:
+
+- its `channel_id` (`UC…`, most reliable),
+- an `@handle` (e.g. `@mkbhd`), or
+- a channel URL.
+
+Courier resolves a handle/URL to a channel id on the first poll and caches it.
+New uploads are posted as plain watch links so Discord renders the native video
+embed. Because video IDs aren't ordered, YouTube dedupe is keyed on each video's
+publish time, so `state.json` stores a timestamp for YouTube sources (and a
+numeric status ID for Nitter sources).
 
 ## Future Sources
 
-The plugin model supports adding:
+The plugin model makes these straightforward to add next:
 - RSS/Atom feeds
 - Reddit subreddits
-- YouTube channels
 - Generic webhooks
 
 ## Nitter Note

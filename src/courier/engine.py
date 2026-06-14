@@ -9,8 +9,10 @@ import time
 import httpx
 
 from courier.config import Config
-from courier.destinations.discord import DiscordWebhookDestination
-from courier.sources.nitter import NitterSource
+from courier.destinations import UnsupportedDestinationType, build_destination
+from courier.destinations.base import Destination
+from courier.sources import SourceContext, UnsupportedSourceType, build_source
+from courier.sources.base import Source
 from courier.state import State
 
 logger = logging.getLogger("courier")
@@ -23,35 +25,30 @@ class Engine:
         self._state = State(config.settings.dedup_persistence)
         self._client = httpx.Client(timeout=15)
 
-        # Build Nitter instance list (primary + other options)
+        # Shared build context for sources (Nitter instance list + HTTP client).
         nitter_instances = [config.nitter_instances.primary] + config.nitter_instances.other_options
+        ctx = SourceContext(client=self._client, nitter_instances=nitter_instances)
 
-        # Build sources
+        # Build sources via the type registry; a source may appear in several
+        # routes, so build each handle once.
         source_map = config.source_map()
-        self._sources: dict[str, NitterSource] = {}
+        self._sources: dict[str, Source] = {}
         for route in config.routes:
             scfg = source_map[route.source]
-            if not scfg.active:
+            if not scfg.active or scfg.handle in self._sources:
                 continue
-            if scfg.type != "nitter":
-                logger.warning("Unsupported source type: %s", scfg.type)
-                continue
-            display_name = scfg.display_name or scfg.handle
-            self._sources[scfg.handle] = NitterSource(
-                handle=scfg.handle,
-                display_name=display_name,
-                nitter_instances=nitter_instances,
-                client=self._client,
-            )
+            try:
+                self._sources[scfg.handle] = build_source(scfg, ctx)
+            except UnsupportedSourceType as exc:
+                logger.warning("Skipping source: %s", exc)
 
-        # Build destinations
-        dest_map = config.destination_map()
-        self._destinations: dict[str, DiscordWebhookDestination] = {}
+        # Build destinations via the type registry.
+        self._destinations: dict[str, Destination] = {}
         for dest in config.destinations:
-            self._destinations[dest.id] = DiscordWebhookDestination(
-                webhook_url=dest.webhook_url,
-                client=self._client,
-            )
+            try:
+                self._destinations[dest.id] = build_destination(dest, self._client)
+            except UnsupportedDestinationType as exc:
+                logger.warning("Skipping destination: %s", exc)
 
         # Build route table: source_handle -> list of destination IDs
         self._route_table: dict[str, list[str]] = {}
@@ -95,7 +92,7 @@ class Engine:
         self._state.save()
         self._client.close()
 
-    def _process_source(self, handle: str, source: NitterSource) -> None:
+    def _process_source(self, handle: str, source: Source) -> None:
         since_id = self._state.get(handle)
         try:
             items = source.fetch(since_id)

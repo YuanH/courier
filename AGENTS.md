@@ -85,8 +85,22 @@ podman logs --tail 80 courier
 - `src/courier/config.py` loads and validates YAML config.
 - `src/courier/engine.py` owns the polling loop, route table, and orchestration.
 - `src/courier/sources/` contains source interfaces and implementations.
+  - `sources/__init__.py` holds the `SOURCE_TYPES` registry and `build_source()`.
+  - Implemented types: `nitter` (X/Twitter RSS), `youtube` (channel RSS).
 - `src/courier/destinations/` contains destination interfaces and implementations.
+  - `destinations/__init__.py` holds the `DESTINATION_TYPES` registry and `build_destination()`.
 - `src/courier/state.py` stores dedupe state.
+
+## Adding a Source or Destination
+
+- Implement the `Source`/`Destination` ABC (including the `from_config` classmethod)
+  and register the class under its `type` string in the relevant registry. The
+  engine builds everything through `build_source`/`build_destination`; do not
+  hard-code concrete classes there.
+- A source's `Item.id` is an opaque, source-defined watermark, not necessarily a
+  natural identifier. It must sort ascending chronologically and round-trip as
+  `since_id`. Nitter uses the numeric status ID; YouTube uses the publish
+  timestamp because video IDs are unordered.
 
 ## Reliability Expectations
 

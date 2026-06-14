@@ -78,6 +78,33 @@ def test_load_config_accepts_mixed_legacy_and_channel_grouped_routes(tmp_path):
     ]
 
 
+def test_load_config_parses_youtube_source(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+sources:
+  - handle: "@mkbhd"
+    type: youtube
+    display_name: MKBHD
+    channel_id: UCBJycsmduvYEL83R_U4JriQ
+destinations:
+  - id: tech
+    webhook_url: https://discord.invalid/tech
+routes:
+  - channel: tech
+    sources:
+      - "@mkbhd"
+"""
+    )
+
+    cfg = load_config(path)
+
+    source = cfg.source_map()["@mkbhd"]
+    assert source.type == "youtube"
+    assert source.channel_id == "UCBJycsmduvYEL83R_U4JriQ"
+    assert [(r.source, r.destinations) for r in cfg.routes] == [("@mkbhd", ["tech"])]
+
+
 def test_load_config_rejects_channel_grouped_route_with_unknown_destination(tmp_path):
     path = write_config(
         tmp_path,

@@ -33,6 +33,15 @@ sources:
     type: nitter
     active: false
 
+  # YouTube channels are polled via their public RSS feed (no API key).
+  # Identify the channel by its UC id (most reliable), an @handle, or a URL —
+  # Courier resolves a handle/URL to a channel id on first poll.
+  - handle: "@mkbhd"
+    display_name: "MKBHD"
+    type: youtube
+    channel_id: "UCBJycsmduvYEL83R_U4JriQ"
+    active: true
+
 destinations:
   - id: "futbol"
     webhook_url: "https://discord.com/api/webhooks/your-webhook-id/your-webhook-token"
@@ -41,6 +50,10 @@ destinations:
   - id: "transfers"
     webhook_url: "https://discord.com/api/webhooks/your-webhook-id/your-webhook-token"
     display_name: "#transfers"
+
+  - id: "tech"
+    webhook_url: "https://discord.com/api/webhooks/your-webhook-id/your-webhook-token"
+    display_name: "#tech"
 
 # Routes can be grouped by destination channel. This keeps the config easy to
 # scan when several sources fan into the same Discord channel.
@@ -55,3 +68,7 @@ routes:
     sources:
       - "FabrizioRomano"
       - "David_Ornstein"
+
+  - channel: "tech"
+    sources:
+      - "@mkbhd"

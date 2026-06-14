@@ -29,7 +29,6 @@ class Source:
     display_name: str = ""
     active: bool = True
     url: str = ""
-    subreddit: str = ""
     channel_id: str = ""
 
 
@@ -37,6 +36,7 @@ class Source:
 class Destination:
     id: str
     webhook_url: str
+    type: str = "discord"
     display_name: str = ""
 
 

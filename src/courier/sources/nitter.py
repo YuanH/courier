@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import TYPE_CHECKING
 
 import feedparser
 import httpx
 
 from courier.sources.base import Item, Source
+
+if TYPE_CHECKING:
+    from courier.config import Source as SourceConfig
+    from courier.sources import SourceContext
 
 logger = logging.getLogger("courier.sources.nitter")
 
@@ -37,6 +42,15 @@ class NitterSource(Source):
         self._display_name = display_name
         self._instances = nitter_instances
         self._client = client or httpx.Client(timeout=15)
+
+    @classmethod
+    def from_config(cls, cfg: SourceConfig, ctx: SourceContext) -> NitterSource:
+        return cls(
+            handle=cfg.handle,
+            display_name=cfg.display_name or cfg.handle,
+            nitter_instances=ctx.nitter_instances,
+            client=ctx.client,
+        )
 
     @property
     def handle(self) -> str:
