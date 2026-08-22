@@ -2,7 +2,7 @@ from typing import cast
 
 import httpx
 
-from courier.sources.nitter import NitterSource
+from courier.sources.nitter import _BROWSER_USER_AGENT, _RSS_USER_AGENT, NitterSource
 
 
 VALID_FEED = """<?xml version="1.0" encoding="UTF-8"?>
@@ -19,98 +19,166 @@ VALID_FEED = """<?xml version="1.0" encoding="UTF-8"?>
 </rss>
 """
 
-MALFORMED_FEED_WITH_ENTRY = """  <?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
-  <channel>
-    <item>
-      <title>Malformed but parseable</title>
-      <link>https://xcancel.com/FabrizioRomano/status/2062170298984652870#m</link>
-    </item>
-  </channel>
-</rss>
-"""
+# A bare "&" in a tweet makes feedparser flag the feed as bozo even though the
+# entries parse fine — dropping those used to lose the whole instance.
+BOZO_FEED_WITH_ENTRY = VALID_FEED.replace(
+    "New transfer news", "Man Utd & Chelsea agree deal", 1
+)
+
+BOT_CHALLENGE = "<!doctype html><html><title>Making sure you're not a bot!</title></html>"
 
 
 class FakeResponse:
-    def __init__(self, text: str, status_code: int = 200, url: str = "https://nitter.net/FabrizioRomano/rss"):
+    def __init__(self, text: str, status_code: int = 200):
+        self.content = text.encode() if isinstance(text, str) else text
         self.text = text
-        self.content = text.encode()
         self.status_code = status_code
-        self.url = url
         self.headers = {"content-type": "application/rss+xml"}
-
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            request = httpx.Request("GET", str(self.url))
-            response = httpx.Response(self.status_code, request=request)
-            raise httpx.HTTPStatusError("bad status", request=request, response=response)
 
 
 class FakeClient:
-    def __init__(self, responses):
-        self.responses = list(responses)
+    """Serves canned responses, either in order or keyed by (url, user-agent)."""
+
+    def __init__(self, responses=None, by_key=None):
+        self.responses = list(responses or [])
+        self.by_key = by_key or {}
         self.calls = []
 
     def get(self, url, **kwargs):
+        user_agent = kwargs["headers"]["User-Agent"]
         self.calls.append((url, kwargs))
+        if self.by_key:
+            return self.by_key[(url, user_agent)]
         return self.responses.pop(0)
 
 
-def test_nitter_fetch_uses_browser_headers_and_redirects():
-    client = FakeClient([FakeResponse(VALID_FEED)])
-    source = NitterSource("FabrizioRomano", "Fabrizio Romano", ["https://nitter.net"], cast(httpx.Client, client))
-
-    items = source.fetch(None)
-
-    assert len(items) == 1
-    _, kwargs = client.calls[0]
-    assert kwargs["follow_redirects"] is True
-    assert "Mozilla/5.0" in kwargs["headers"]["User-Agent"]
-
-
-def test_nitter_fetch_uses_rss_reader_headers_for_xcancel():
-    client = FakeClient([FakeResponse(VALID_FEED)])
-    source = NitterSource(
-        "FabrizioRomano", "Fabrizio Romano", ["https://xcancel.com"], cast(httpx.Client, client)
+def make_source(instances, client):
+    return NitterSource(
+        "FabrizioRomano", "Fabrizio Romano", instances, cast(httpx.Client, client)
     )
 
-    source.fetch(None)
 
+def test_fetch_uses_browser_identity_and_follows_redirects():
+    client = FakeClient([FakeResponse(VALID_FEED)])
+    items = make_source(["https://nitter.net"], client).fetch(None)
+
+    assert [i.id for i in items] == ["2062170298984652870"]
     _, kwargs = client.calls[0]
-    assert kwargs["headers"]["User-Agent"] == "Feedly/1.0"
+    assert kwargs["follow_redirects"] is True
+    assert kwargs["headers"]["User-Agent"] == _BROWSER_USER_AGENT
 
 
-def test_nitter_fetch_accepts_rss_with_leading_whitespace():
-    client = FakeClient([FakeResponse("  \n" + VALID_FEED)])
-    source = NitterSource("FabrizioRomano", "Fabrizio Romano", ["https://xcancel.com"], cast(httpx.Client, client))
+def test_fetch_retries_same_instance_with_rss_identity_on_403():
+    client = FakeClient([FakeResponse("nope", status_code=403), FakeResponse(VALID_FEED)])
+    items = make_source(["https://xcancel.com"], client).fetch(None)
 
-    items = source.fetch(None)
+    assert [i.id for i in items] == ["2062170298984652870"]
+    assert [c[1]["headers"]["User-Agent"] for c in client.calls] == [
+        _BROWSER_USER_AGENT,
+        _RSS_USER_AGENT,
+    ]
 
-    assert [item.id for item in items] == ["2062170298984652870"]
+
+def test_fetch_retries_with_rss_identity_on_bot_challenge():
+    client = FakeClient([FakeResponse(BOT_CHALLENGE), FakeResponse(VALID_FEED)])
+    items = make_source(["https://xcancel.com"], client).fetch(None)
+
+    assert [i.id for i in items] == ["2062170298984652870"]
+    assert len(client.calls) == 2
 
 
-def test_nitter_fetch_rejects_bozo_feed_even_if_entries_parse():
-    client = FakeClient([FakeResponse(MALFORMED_FEED_WITH_ENTRY)])
-    source = NitterSource("FabrizioRomano", "Fabrizio Romano", ["https://nitter.net"], cast(httpx.Client, client))
+def test_fetch_does_not_retry_identity_on_server_error():
+    client = FakeClient([FakeResponse("boom", status_code=503), FakeResponse(VALID_FEED)])
+    items = make_source(["https://nitter.net", "https://xcancel.com"], client).fetch(None)
 
-    items = source.fetch(None)
+    # One attempt at the dead instance, then straight on to the next host.
+    assert [c[0] for c in client.calls] == [
+        "https://nitter.net/FabrizioRomano/rss",
+        "https://xcancel.com/FabrizioRomano/rss",
+    ]
+    assert [i.id for i in items] == ["2062170298984652870"]
+
+
+def test_fetch_accepts_feed_with_leading_whitespace_and_bom():
+    client = FakeClient([FakeResponse("﻿  \n" + VALID_FEED)])
+    items = make_source(["https://xcancel.com"], client).fetch(None)
+
+    assert [i.id for i in items] == ["2062170298984652870"]
+
+
+def test_fetch_keeps_entries_from_a_feed_flagged_bozo():
+    client = FakeClient([FakeResponse(BOZO_FEED_WITH_ENTRY)])
+    items = make_source(["https://nitter.net"], client).fetch(None)
+
+    assert [i.id for i in items] == ["2062170298984652870"]
+
+
+def test_fetch_falls_back_when_an_instance_serves_html():
+    client = FakeClient(
+        [FakeResponse(BOT_CHALLENGE), FakeResponse(BOT_CHALLENGE), FakeResponse(VALID_FEED)]
+    )
+    items = make_source(
+        ["https://nitter.privacyredirect.com", "https://nitter.net"], client
+    ).fetch(None)
+
+    assert [i.id for i in items] == ["2062170298984652870"]
+    assert len(client.calls) == 3
+
+
+def test_fetch_falls_back_when_an_instance_serves_an_empty_feed():
+    empty = VALID_FEED.replace(VALID_FEED[VALID_FEED.index("<item>") : VALID_FEED.index("</item>") + 7], "")
+    client = FakeClient([FakeResponse(empty), FakeResponse(VALID_FEED)])
+    items = make_source(["https://nitter.net", "https://xcancel.com"], client).fetch(None)
+
+    assert [i.id for i in items] == ["2062170298984652870"]
+
+
+def test_fetch_filters_by_watermark_numerically():
+    client = FakeClient([FakeResponse(VALID_FEED)])
+    items = make_source(["https://nitter.net"], client).fetch("2062170298984652870")
 
     assert items == []
 
 
-def test_nitter_fetch_skips_html_bot_check_and_uses_fallback():
-    client = FakeClient([
-        FakeResponse("<!doctype html><html><title>Making sure you're not a bot!</title></html>"),
-        FakeResponse(VALID_FEED, url="https://nitter.net/FabrizioRomano/rss"),
-    ])
-    source = NitterSource(
-        "FabrizioRomano",
-        "Fabrizio Romano",
-        ["https://nitter.privacyredirect.com", "https://nitter.net"],
-        cast(httpx.Client, client),
+def test_fetch_refuses_to_replay_history_on_a_corrupt_watermark():
+    client = FakeClient([FakeResponse(VALID_FEED)])
+    items = make_source(["https://nitter.net"], client).fetch("2026-08-21T10:00:00Z")
+
+    assert items == []
+    assert client.calls == []
+
+
+def test_fetch_returns_nothing_when_every_instance_fails():
+    client = FakeClient([FakeResponse("", status_code=404)] * 4)
+    items = make_source(["https://nitter.net", "https://xcancel.com"], client).fetch(None)
+
+    assert items == []
+    assert len(client.calls) == 4
+
+
+def test_probe_reports_every_instance_without_stopping_early():
+    client = FakeClient(
+        by_key={
+            ("https://nitter.net/FabrizioRomano/rss", _BROWSER_USER_AGENT): FakeResponse(""),
+            ("https://xcancel.com/FabrizioRomano/rss", _BROWSER_USER_AGENT): FakeResponse(
+                VALID_FEED
+            ),
+        }
     )
+    results = make_source(["https://nitter.net", "https://xcancel.com"], client).probe()
 
-    items = source.fetch(None)
+    assert [(r.outcome, r.ok) for r in results] == [("empty-body", False), ("ok", True)]
+    assert results[1].item_ids == ["2062170298984652870"]
 
-    assert [item.id for item in items] == ["2062170298984652870"]
-    assert len(client.calls) == 2
+
+def test_media_urls_do_not_clobber_the_feed_url():
+    feed = VALID_FEED.replace(
+        "</item>",
+        '<media:content url="https://nitter.net/pic/media.jpg" '
+        'xmlns:media="http://search.yahoo.com/mrss/"/></item>',
+    )
+    client = FakeClient([FakeResponse(feed)])
+    items = make_source(["https://nitter.net"], client).fetch(None)
+
+    assert items[0].url == "https://nitter.net/FabrizioRomano/status/2062170298984652870#m"
+    assert items[0].media_urls == ["https://nitter.net/pic/media.jpg"]

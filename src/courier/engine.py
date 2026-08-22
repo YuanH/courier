@@ -12,10 +12,21 @@ from courier.config import Config
 from courier.destinations import UnsupportedDestinationType, build_destination
 from courier.destinations.base import Destination
 from courier.sources import SourceContext, UnsupportedSourceType, build_source
-from courier.sources.base import Item, Source
+from courier.sources.base import Item, ProbeResult, Source
 from courier.state import State
 
 logger = logging.getLogger("courier")
+
+
+def _unique(values: list[str]) -> list[str]:
+    """Drop repeats while preserving order, so an instance is not polled twice."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
 
 
 class Engine:
@@ -29,11 +40,13 @@ class Engine:
         # Keep the explicit fallback in the runtime list.  Config parsing has
         # always accepted it, but omitting it here silently made deployments
         # try only primary plus ``other_options``.
-        nitter_instances = [
-            config.nitter_instances.primary,
-            config.nitter_instances.fallback,
-            *config.nitter_instances.other_options,
-        ]
+        nitter_instances = _unique(
+            [
+                config.nitter_instances.primary,
+                config.nitter_instances.fallback,
+                *config.nitter_instances.other_options,
+            ]
+        )
         ctx = SourceContext(client=self._client, nitter_instances=nitter_instances)
 
         # Build sources via the type registry; a source may appear in several
@@ -68,6 +81,17 @@ class Engine:
         # Register signal handlers for graceful shutdown
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
+
+    def diagnose(self, handle: str | None = None) -> dict[str, list[ProbeResult]]:
+        """Probe every configured source (or one handle) and report per-endpoint results.
+
+        This runs the same instance list the poll loop uses, so a green probe
+        here means the daemon can fetch too.
+        """
+        selected = self._sources if handle is None else {
+            h: s for h, s in self._sources.items() if h == handle
+        }
+        return {h: source.probe() for h, source in selected.items()}
 
     def _handle_signal(self, signum: int, _frame) -> None:
         logger.info("Received signal %s, shutting down...", signum)

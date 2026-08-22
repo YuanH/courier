@@ -27,6 +27,7 @@ Courier is a small Python daemon for many-to-many data routing: poll sources, de
 uv sync
 uv run courier -c config.yaml
 uv run courier -c config.yaml -v
+uv run courier -c config.yaml --diagnose   # probe every source endpoint, then exit
 ```
 
 Container workflow:
@@ -87,6 +88,9 @@ podman logs --tail 80 courier
 - `src/courier/sources/` contains source interfaces and implementations.
   - `sources/__init__.py` holds the `SOURCE_TYPES` registry and `build_source()`.
   - Implemented types: `nitter` (X/Twitter RSS), `youtube` (channel RSS).
+  - A source may implement `probe()` to report per-endpoint diagnostics; the
+    default returns an empty list. `Engine.diagnose()` and `--diagnose` build on
+    it, so no source type is named there explicitly.
 - `src/courier/destinations/` contains destination interfaces and implementations.
   - `destinations/__init__.py` holds the `DESTINATION_TYPES` registry and `build_destination()`.
 - `src/courier/state.py` stores dedupe state.
