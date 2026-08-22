@@ -25,7 +25,24 @@ uv run courier -c config.yaml
 ```
 uv run courier -c config.yaml        # run with config
 uv run courier -c config.yaml -v      # debug logging
+
+uv run courier -c config.yaml --diagnose                  # probe every endpoint, then exit
+uv run courier -c config.yaml --diagnose FabrizioRomano   # probe one source
 ```
+
+`--diagnose` walks the same instance list the poll loop uses and reports what
+each endpoint actually returned, so a feed that has gone quiet can be told apart
+from an instance that is refusing you:
+
+```
+FabrizioRomano: OK
+  [    empty-body] https://nitter.net/FabrizioRomano/rss  status=200 bytes=0
+  [    http-error] https://xcancel.com/FabrizioRomano/rss  status=403 bytes=9
+  [            ok] https://xcancel.com/FabrizioRomano/rss  status=200 bytes=4211 entries=20 newest=2062170298984652870
+```
+
+It exits non-zero when any source has no working endpoint, so it also works as
+a health check.
 
 ## Podman
 
@@ -113,7 +130,23 @@ The plugin model makes these straightforward to add next:
 
 ## Nitter Note
 
-Public Nitter instances are increasingly unreliable (bot protection, takedowns). The code correctly fetches RSS from any working instance with automatic fallback. If you have a self-hosted Nitter instance, point `nitter_instances.primary` at it for best results.
+Public Nitter instances are increasingly unreliable (bot protection, takedowns).
+Courier fetches RSS from any working instance with automatic fallback, and
+tolerates the ways these instances misbehave:
+
+- an instance that answers `4xx` is retried once under a feed-reader
+  User-Agent, because some hosts refuse browser-like clients on their RSS
+  endpoints and others refuse everything else;
+- blank bodies, HTML bot-challenge pages, and feeds with no tweet links are
+  treated as failures, so the next instance gets a turn;
+- byte-order marks and whitespace before the XML declaration are stripped, and
+  a feed that parses into usable entries is kept even when the parser flags it
+  (one stray `&` in a tweet should not cost you the whole feed).
+
+Instances rot faster than this list can be updated. When feeds go quiet, run
+`--diagnose` first: it tells you which endpoints answered and how. If you have
+a self-hosted Nitter instance, point `nitter_instances.primary` at it for best
+results.
 
 ## License
 

@@ -6,6 +6,9 @@ settings:
   dedup_persistence: "state.json"
   nitter_fallback: "xcancel.com"
 
+# Tried in order: primary, then fallback, then each of other_options.
+# Public instances come and go — run `courier --diagnose` to see which of these
+# are actually answering before assuming a feed has gone quiet.
 nitter_instances:
   primary: "https://nitter.net"
   fallback: "https://xcancel.com"
