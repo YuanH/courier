@@ -12,7 +12,7 @@ from courier.config import Config
 from courier.destinations import UnsupportedDestinationType, build_destination
 from courier.destinations.base import Destination
 from courier.sources import SourceContext, UnsupportedSourceType, build_source
-from courier.sources.base import Source
+from courier.sources.base import Item, Source
 from courier.state import State
 
 logger = logging.getLogger("courier")
@@ -26,7 +26,14 @@ class Engine:
         self._client = httpx.Client(timeout=15)
 
         # Shared build context for sources (Nitter instance list + HTTP client).
-        nitter_instances = [config.nitter_instances.primary] + config.nitter_instances.other_options
+        # Keep the explicit fallback in the runtime list.  Config parsing has
+        # always accepted it, but omitting it here silently made deployments
+        # try only primary plus ``other_options``.
+        nitter_instances = [
+            config.nitter_instances.primary,
+            config.nitter_instances.fallback,
+            *config.nitter_instances.other_options,
+        ]
         ctx = SourceContext(client=self._client, nitter_instances=nitter_instances)
 
         # Build sources via the type registry; a source may appear in several
@@ -121,19 +128,48 @@ class Engine:
             logger.warning("No destinations configured for %s; not advancing state", handle)
             return
 
+        # The watermark may only advance past items every configured
+        # destination accepted.  Stop at the first failure so the next poll
+        # resumes from there; advancing past a failed item would drop it
+        # permanently.
+        delivered_id: str | None = None
         for item in items:
-            for dest_id in dest_ids:
-                dest = self._destinations.get(dest_id)
-                if dest is None:
-                    logger.warning("Unknown destination %s for %s", dest_id, handle)
-                    continue
-                try:
-                    logger.info("Sending %s from %s to %s", item.id, handle, dest_id)
-                    dest.send(item, handle)
-                    logger.info("Sent %s from %s to %s", item.id, handle, dest_id)
-                except Exception:
-                    logger.exception("Failed to send %s to %s", item.id, dest_id)
+            if not self._deliver(item, handle, dest_ids):
+                break
+            delivered_id = item.id
 
-        # Update state to latest item ID and persist immediately.
-        self._state.set(handle, latest_id)
+        if delivered_id is None:
+            logger.warning(
+                "No items delivered for %s; leaving state at %s", handle, since_id
+            )
+            return
+
+        if delivered_id != latest_id:
+            logger.warning(
+                "Partial delivery for %s; advancing state to %s instead of %s",
+                handle,
+                delivered_id,
+                latest_id,
+            )
+
+        # Update state to the last fully delivered item ID and persist immediately.
+        self._state.set(handle, delivered_id)
         self._state.save()
+
+    def _deliver(self, item: Item, handle: str, dest_ids: list[str]) -> bool:
+        """Send one item to every destination; True only if all accepted it."""
+        for dest_id in dest_ids:
+            dest = self._destinations.get(dest_id)
+            if dest is None:
+                # An unknown destination is a delivery failure, not a skip:
+                # the item never reached a route it was configured for.
+                logger.warning("Unknown destination %s for %s", dest_id, handle)
+                return False
+            try:
+                logger.info("Sending %s from %s to %s", item.id, handle, dest_id)
+                dest.send(item, handle)
+                logger.info("Sent %s from %s to %s", item.id, handle, dest_id)
+            except Exception:
+                logger.exception("Failed to send %s to %s", item.id, dest_id)
+                return False
+        return True

@@ -23,6 +23,19 @@ _USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0 Safari/537.36"
 )
+_RSS_USER_AGENT = "Feedly/1.0"
+
+
+def _headers_for_instance(instance: str) -> dict[str, str]:
+    """Use an RSS-reader identity for xcancel's RSS-only endpoint.
+
+    xcancel redirects feeds to rss.xcancel.com, which deliberately returns a
+    400 page to ordinary browser clients. Nitter instances continue to get the
+    browser-like user agent they historically required.
+    """
+    if "xcancel.com" in instance.lower():
+        return {"User-Agent": _RSS_USER_AGENT}
+    return {"User-Agent": _USER_AGENT}
 
 
 def _extract_id(link: str) -> str | None:
@@ -64,7 +77,7 @@ class NitterSource(Source):
             try:
                 r = self._client.get(
                     url,
-                    headers={"User-Agent": _USER_AGENT},
+                    headers=_headers_for_instance(instance),
                     follow_redirects=True,
                 )
                 r.raise_for_status()
@@ -94,7 +107,11 @@ class NitterSource(Source):
                 )
                 continue
 
-            feed = feedparser.parse(body)
+            # rss.xcancel.com prefixes feeds with spaces before the XML
+            # declaration; strict feedparser marks that otherwise-valid feed
+            # as bozo. Preserve validation for all other providers.
+            feed_body = body.lstrip() if "xcancel.com" in instance.lower() else body
+            feed = feedparser.parse(feed_body)
             if feed.bozo:
                 logger.warning(
                     "RSS parse error for %s from %s bytes=%d error=%s",

@@ -68,9 +68,30 @@ def test_nitter_fetch_uses_browser_headers_and_redirects():
     assert "Mozilla/5.0" in kwargs["headers"]["User-Agent"]
 
 
+def test_nitter_fetch_uses_rss_reader_headers_for_xcancel():
+    client = FakeClient([FakeResponse(VALID_FEED)])
+    source = NitterSource(
+        "FabrizioRomano", "Fabrizio Romano", ["https://xcancel.com"], cast(httpx.Client, client)
+    )
+
+    source.fetch(None)
+
+    _, kwargs = client.calls[0]
+    assert kwargs["headers"]["User-Agent"] == "Feedly/1.0"
+
+
+def test_nitter_fetch_accepts_rss_with_leading_whitespace():
+    client = FakeClient([FakeResponse("  \n" + VALID_FEED)])
+    source = NitterSource("FabrizioRomano", "Fabrizio Romano", ["https://xcancel.com"], cast(httpx.Client, client))
+
+    items = source.fetch(None)
+
+    assert [item.id for item in items] == ["2062170298984652870"]
+
+
 def test_nitter_fetch_rejects_bozo_feed_even_if_entries_parse():
     client = FakeClient([FakeResponse(MALFORMED_FEED_WITH_ENTRY)])
-    source = NitterSource("FabrizioRomano", "Fabrizio Romano", ["https://xcancel.com"], cast(httpx.Client, client))
+    source = NitterSource("FabrizioRomano", "Fabrizio Romano", ["https://nitter.net"], cast(httpx.Client, client))
 
     items = source.fetch(None)
 
