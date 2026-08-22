@@ -89,6 +89,56 @@ The current build is healthy as a process and polls configured sources. It corre
 
 No source watermark should advance solely because a provider returns the current invalid responses.
 
+## Follow-up changes (post-investigation)
+
+The findings above showed Courier was diagnosing the outage correctly but had
+no way to act on it: the provider list was capped at three entries by the
+config schema, and every entry was forced into Nitter's URL layout. Three
+changes address that.
+
+### Provider list
+
+`nitter_instances` now accepts an ordered list, so the chain is not limited to
+what `primary` and `fallback` can name:
+
+```yaml
+nitter_instances:
+  - "https://xcancel.com"
+  - "https://nitter.poast.org"
+  - "https://nitter.tiekoetter.com"
+```
+
+The legacy `primary`/`fallback`/`other_options` mapping still loads and is
+flattened in that order, so existing configs are unaffected.
+
+### Non-Nitter providers
+
+A provider entry may be a `{handle}` template instead of a base URL:
+
+```yaml
+  - "https://rsshub.example.com/twitter/user/{handle}"
+```
+
+This matters for recovery option 2 and 3 below: a self-hosted bridge or an
+RSSHub route can be dropped into the existing fallback chain, reusing Courier's
+dedupe, watermark and Discord delivery, without a new source type. A base URL
+still gets Nitter's `/<handle>/rss` layout.
+
+### Request profile
+
+The browser identity now sends the header set a browser actually sends
+(`Accept-Language`, `Sec-Fetch-*`, `Upgrade-Insecure-Requests`) rather than a
+User-Agent alone, because several surviving instances sit behind a CDN that
+scores the whole request. The RSS-reader retry is unchanged, and is still
+attempted only after a `4xx` or an HTML challenge — not after a timeout or a
+`5xx`, where a second identity would fail identically.
+
+### What these changes do not do
+
+None of this makes a dead provider work. The operational fact recorded above
+stands: recovery still depends on one of the options below. What changed is
+that a working provider, once found, can be configured without code changes.
+
 ## Recovery options
 
 1. **XCancel whitelist approval**

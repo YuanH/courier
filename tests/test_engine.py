@@ -1,6 +1,6 @@
 from typing import cast
 
-from courier.config import Config, Destination, NitterSettings, Route, Settings, Source
+from courier.config import Config, Destination, Route, Settings, Source
 from courier.destinations.discord import DiscordWebhookDestination
 from courier.engine import Engine
 from courier.sources.base import Item
@@ -41,7 +41,7 @@ def item(status_id, text):
 def make_engine(tmp_path):
     cfg = Config(
         settings=Settings(poll_interval_minutes=5, dedup_persistence=str(tmp_path / "state.json")),
-        nitter_instances=NitterSettings(primary="https://nitter.net", fallback="https://xcancel.com"),
+        nitter_instances=["https://nitter.net", "https://xcancel.com"],
         sources=[Source(handle="FabrizioRomano", display_name="Fabrizio Romano")],
         destinations=[Destination(id="futbol", webhook_url="https://discord.invalid/webhook")],
         routes=[Route(source="FabrizioRomano", destinations=["futbol"])],

@@ -143,10 +143,31 @@ tolerates the ways these instances misbehave:
   a feed that parses into usable entries is kept even when the parser flags it
   (one stray `&` in a tweet should not cost you the whole feed).
 
-Instances rot faster than this list can be updated. When feeds go quiet, run
-`--diagnose` first: it tells you which endpoints answered and how. If you have
-a self-hosted Nitter instance, point `nitter_instances.primary` at it for best
-results.
+One failure mode deserves its own mention, because it looks like success:
+a provider can return a structurally valid feed whose only entry is a
+whitelist or signup interstitial. HTTP status, XML validity, byte count and
+entry count all look healthy. Courier therefore treats a provider as usable
+only when the feed yields at least one `/status/<tweet-id>` link, and reports
+anything else as `no-status-links`.
+
+Providers rot faster than any list can be updated, so configure several:
+
+```yaml
+nitter_instances:
+  - "https://xcancel.com"
+  - "https://nitter.poast.org"
+  - "https://nitter.tiekoetter.com"
+  - "https://rsshub.example.com/twitter/user/{handle}"
+```
+
+Each entry is either a base URL, which gets Nitter's `/<handle>/rss` layout, or
+a template naming `{handle}`. The template form is how a non-Nitter provider —
+a self-hosted bridge, an RSSHub route, a per-handle feed from a hosted service
+— joins the same fallback chain without any new code. The older
+`primary`/`fallback`/`other_options` mapping still loads.
+
+When feeds go quiet, run `--diagnose` first: it tells you which providers
+answered and how. If you have a self-hosted instance, list it first.
 
 ## License
 
