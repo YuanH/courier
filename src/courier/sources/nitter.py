@@ -35,18 +35,56 @@ _BROWSER_USER_AGENT = (
 )
 _RSS_USER_AGENT = "Feedly/1.0 (+https://feedly.com/i/feed)"
 
-# Instances disagree about which identity they accept: some refuse anything
+_ACCEPT = "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5"
+
+# Providers disagree about which identity they accept: some refuse anything
 # that does not look like a browser, and some refuse browsers on their
 # RSS-only hosts. Rather than hard-coding a guess per domain, try the browser
 # identity first and fall back to the feed-reader one when a response looks
 # like a refusal rather than an outage.
-_USER_AGENTS = (_BROWSER_USER_AGENT, _RSS_USER_AGENT)
-
-_ACCEPT = "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5"
+#
+# Several surviving instances sit behind a CDN that scores requests on the
+# whole header set, not the User-Agent alone, so the browser identity sends
+# the headers a browser would actually send.
+_BROWSER_IDENTITY = (
+    "browser",
+    {
+        "User-Agent": _BROWSER_USER_AGENT,
+        "Accept": _ACCEPT,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1",
+    },
+)
+_RSS_READER_IDENTITY = (
+    "rss-reader",
+    {
+        "User-Agent": _RSS_USER_AGENT,
+        "Accept": _ACCEPT,
+        "Accept-Language": "en-US,en;q=0.9",
+    },
+)
+_IDENTITIES = (_BROWSER_IDENTITY, _RSS_READER_IDENTITY)
 
 # Outcomes worth re-trying under the other identity; anything else (a dead
 # host, a 5xx, an empty body) will fail the same way whoever is asking.
 _RETRY_WITH_OTHER_UA = {"http-error", "bot-challenge"}
+
+
+def _feed_url(provider: str, handle: str) -> str:
+    """Build the feed URL for one provider.
+
+    A provider is either a base URL, which gets Nitter's ``/<handle>/rss``
+    layout, or a template naming ``{handle}`` explicitly. The template form
+    lets a non-Nitter provider (a self-hosted bridge, an RSSHub route, a
+    per-handle feed from a hosted service) be dropped into the same fallback
+    chain without new code.
+    """
+    if "{handle}" in provider:
+        return provider.replace("{handle}", handle)
+    return f"{provider.rstrip('/')}/{handle}/rss"
 
 
 def _strip_preamble(raw: bytes) -> bytes:
@@ -131,7 +169,7 @@ class NitterSource(Source):
             return self._items_from(attempt.entries, watermark)
 
         logger.error(
-            "No Nitter instance returned a usable feed for %s — tried %s",
+            "No provider returned tweets for %s — tried %s",
             self._handle,
             "; ".join(self._summarize(r) for r in results) or "<no instances configured>",
         )
@@ -147,11 +185,11 @@ class NitterSource(Source):
     def _fetch_instance(
         self, instance: str, results: list[ProbeResult]
     ) -> _Attempt | None:
-        """Try one instance under each identity; return the first usable feed."""
-        url = f"{instance.rstrip('/')}/{self._handle}/rss"
+        """Try one provider under each identity; return the first usable feed."""
+        url = _feed_url(instance, self._handle)
 
-        for user_agent in _USER_AGENTS:
-            attempt = self._request(url, user_agent)
+        for name, headers in _IDENTITIES:
+            attempt = self._request(url, name, headers)
             results.append(attempt.result)
             if attempt.result.ok:
                 return attempt
@@ -159,9 +197,7 @@ class NitterSource(Source):
                 return None
         return None
 
-    def _request(self, url: str, user_agent: str) -> _Attempt:
-        headers = {"User-Agent": user_agent, "Accept": _ACCEPT}
-
+    def _request(self, url: str, identity: str, headers: dict[str, str]) -> _Attempt:
         def failure(outcome: str, detail: str, **kw) -> _Attempt:
             # A single failed attempt is routine in a fallback chain, so log it
             # at INFO; the aggregate ERROR below fires only if nothing worked.
@@ -169,7 +205,7 @@ class NitterSource(Source):
                 "Nitter attempt failed for %s at %s (%s): %s — %s",
                 self._handle,
                 url,
-                user_agent.split("/")[0],
+                identity,
                 outcome,
                 detail,
             )

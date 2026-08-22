@@ -36,17 +36,12 @@ class Engine:
         self._state = State(config.settings.dedup_persistence)
         self._client = httpx.Client(timeout=15)
 
-        # Shared build context for sources (Nitter instance list + HTTP client).
-        # Keep the explicit fallback in the runtime list.  Config parsing has
-        # always accepted it, but omitting it here silently made deployments
-        # try only primary plus ``other_options``.
-        nitter_instances = _unique(
-            [
-                config.nitter_instances.primary,
-                config.nitter_instances.fallback,
-                *config.nitter_instances.other_options,
-            ]
-        )
+        # Shared build context for sources (provider list + HTTP client).
+        nitter_instances = _unique(config.nitter_instances)
+        if not nitter_instances:
+            logger.warning(
+                "No nitter_instances configured; Nitter sources cannot fetch anything"
+            )
         ctx = SourceContext(client=self._client, nitter_instances=nitter_instances)
 
         # Build sources via the type registry; a source may appear in several

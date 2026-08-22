@@ -182,3 +182,42 @@ def test_media_urls_do_not_clobber_the_feed_url():
 
     assert items[0].url == "https://nitter.net/FabrizioRomano/status/2062170298984652870#m"
     assert items[0].media_urls == ["https://nitter.net/pic/media.jpg"]
+
+
+def test_base_url_provider_gets_the_nitter_feed_layout():
+    client = FakeClient([FakeResponse(VALID_FEED)])
+    make_source(["https://nitter.poast.org/"], client).fetch(None)
+
+    assert client.calls[0][0] == "https://nitter.poast.org/FabrizioRomano/rss"
+
+
+def test_template_provider_places_the_handle_itself():
+    client = FakeClient([FakeResponse(VALID_FEED)])
+    make_source(["https://rsshub.example.com/twitter/user/{handle}"], client).fetch(None)
+
+    assert client.calls[0][0] == "https://rsshub.example.com/twitter/user/FabrizioRomano"
+
+
+def test_browser_identity_sends_a_full_browser_header_set():
+    client = FakeClient([FakeResponse(VALID_FEED)])
+    make_source(["https://nitter.net"], client).fetch(None)
+
+    headers = client.calls[0][1]["headers"]
+    assert headers["User-Agent"] == _BROWSER_USER_AGENT
+    assert headers["Accept-Language"].startswith("en-US")
+    assert headers["Sec-Fetch-Mode"] == "navigate"
+
+
+def test_valid_rss_carrying_only_an_interstitial_is_not_a_success():
+    """XCancel's whitelist page parses as RSS but links to no tweet."""
+    interstitial = VALID_FEED.replace(
+        "https://nitter.net/FabrizioRomano/status/2062170298984652870#m",
+        "https://xcancel.com/about/whitelist",
+    )
+    client = FakeClient([FakeResponse(interstitial), FakeResponse(VALID_FEED)])
+    source = make_source(["https://xcancel.com", "https://nitter.poast.org"], client)
+
+    items = source.fetch(None)
+
+    assert [i.id for i in items] == ["2062170298984652870"]
+    assert client.calls[-1][0] == "https://nitter.poast.org/FabrizioRomano/rss"

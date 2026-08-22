@@ -121,3 +121,59 @@ def test_load_config_rejects_channel_grouped_route_with_unknown_destination(tmp_
         assert "unknown-channel" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_load_config_accepts_a_provider_list(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+nitter_instances:
+  - https://xcancel.com
+  - https://nitter.poast.org
+  - https://rsshub.example.com/twitter/user/{handle}
+sources:
+  - handle: GSpier
+    type: nitter
+destinations:
+  - id: investing
+    webhook_url: https://discord.invalid/investing
+routes:
+  - channel: investing
+    sources: [GSpier]
+"""
+    )
+
+    cfg = load_config(path)
+
+    assert cfg.nitter_instances == [
+        "https://xcancel.com",
+        "https://nitter.poast.org",
+        "https://rsshub.example.com/twitter/user/{handle}",
+    ]
+
+
+def test_load_config_flattens_legacy_nitter_mapping_in_order(tmp_path):
+    path = write_config(tmp_path, "  - channel: investing\n    sources: [GSpier]\n")
+
+    cfg = load_config(path)
+
+    assert cfg.nitter_instances == ["https://nitter.net", "https://xcancel.com"]
+
+
+def test_load_config_rejects_a_malformed_nitter_instances_block(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+nitter_instances: "https://xcancel.com"
+sources: []
+destinations: []
+routes: []
+"""
+    )
+
+    try:
+        load_config(path)
+    except ValueError as exc:
+        assert "nitter_instances" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")

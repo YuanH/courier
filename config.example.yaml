@@ -6,14 +6,35 @@ settings:
   dedup_persistence: "state.json"
   nitter_fallback: "xcancel.com"
 
-# Tried in order: primary, then fallback, then each of other_options.
-# Public instances come and go — run `courier --diagnose` to see which of these
-# are actually answering before assuming a feed has gone quiet.
+# X/Twitter RSS providers, tried in order until one returns actual tweets.
+#
+# Public Nitter instances rot fast, and several serve a valid-looking feed that
+# contains no tweets at all (a whitelist or signup interstitial), so list
+# several and let Courier fall through them. Run `courier --diagnose` to see
+# which of these are answering for you today — HTTP 200 is not evidence of a
+# working timeline; a `/status/<tweet-id>` link is.
+#
+# An entry is either a base URL, which gets Nitter's `/<handle>/rss` layout, or
+# a template naming {handle}, for a provider that shapes URLs differently
+# (a self-hosted bridge, an RSSHub route, a per-handle hosted feed).
 nitter_instances:
-  primary: "https://nitter.net"
-  fallback: "https://xcancel.com"
-  other_options:
-    - "https://nitter.privacyredirect.com"
+  - "https://xcancel.com"
+  - "https://nitter.poast.org"
+  - "https://nitter.tiekoetter.com"
+  - "https://nitter.catsarch.com"
+  - "https://lightbrd.com"
+  - "https://nuku.trabun.org"
+  - "https://nitter.kareem.one"
+  - "https://nitter.privacyredirect.com"
+  - "https://nitter.space"
+  # Non-Nitter providers slot into the same chain via a {handle} template:
+  # - "https://rsshub.example.com/twitter/user/{handle}"
+
+# The legacy mapping form still loads:
+#   nitter_instances:
+#     primary: "https://xcancel.com"
+#     fallback: "https://nitter.poast.org"
+#     other_options: ["https://lightbrd.com"]
 
 sources:
   - handle: "FabrizioRomano"
